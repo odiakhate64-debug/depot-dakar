@@ -1,0 +1,25 @@
+{
+  "name": "Dépôt DAKAR 3",
+  "short_name": "DAKAR 3",
+  "description": "Gestion de stock et dépenses du Dépôt DAKAR 3",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#f5a623",
+  "orientation": "portrait-primary",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
