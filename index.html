@@ -109,6 +109,8 @@ tr:last-child td{border-bottom:none}
 .rapport-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:12px}
 .rapport-total{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--accent)}
 </style>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -120,7 +122,10 @@ tr:last-child td{border-bottom:none}
       <div class="logo-sub">Gestion Stock Farine</div>
     </div>
   </div>
-  <div class="header-date" id="headerDate"></div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#81c784;box-shadow:0 0 6px #81c784" title="Synchronisé"></div>
+    <div class="header-date" id="headerDate"></div>
+  </div>
 </div>
 
 <div class="scroll-area">
@@ -412,12 +417,65 @@ const ALL_CATS=['CHARGEMENT','DECHARGEMENT','TRANSPORT','MAIRIE','WOYOFAL','GARD
 const CAT_ICONS={CHARGEMENT:'🏗️',DECHARGEMENT:'📥',TRANSPORT:'🚛',MAIRIE:'🏛️',WOYOFAL:'💡',GARDIENNAGE:'🔐',NETTOYAGE:'🧹',REPAS:'🍽️',ELECTRICITE:'⚡',AUTRE:'📌'};
 const CAT_COLORS={CHARGEMENT:'var(--accent2)',DECHARGEMENT:'var(--fp)',TRANSPORT:'var(--fc)',MAIRIE:'#a5d6a7',WOYOFAL:'#ffcc80',GARDIENNAGE:'#80cbc4',NETTOYAGE:'#b39ddb',REPAS:'#f48fb1',ELECTRICITE:'#ffe082',AUTRE:'var(--fb)'};
 
-let data=JSON.parse(localStorage.getItem('depot_farine_v3')||JSON.stringify({
+// ===== FIREBASE CONFIG =====
+const firebaseConfig = {
+  databaseURL: 'https://depotges-42795-default-rtdb.firebaseio.com'
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const REF = db.ref('depot_dakar3');
+
+let data = {
   appros:[],sorties:[],depenses:[],virements:[],
   seuils:{'FIRST CHOICE':20,'TERANGA':20,'PATISSIERE':20,'BEIGNET':20}
-}));
-if(!data.virements) data.virements=[];
-function save(){localStorage.setItem('depot_farine_v3',JSON.stringify(data))}
+};
+
+let _saving = false;
+
+function save(){
+  _saving = true;
+  const dot = document.getElementById('sync-dot');
+  if(dot){ dot.style.background='#f5a623'; dot.style.boxShadow='0 0 6px #f5a623'; }
+  REF.set(data).then(()=>{
+    _saving = false;
+    const dot2 = document.getElementById('sync-dot');
+    if(dot2){ dot2.style.background='#81c784'; dot2.style.boxShadow='0 0 6px #81c784'; }
+  }).catch(e=>{
+    console.error('Firebase save error:', e);
+    // Fallback to localStorage
+    localStorage.setItem('depot_farine_backup', JSON.stringify(data));
+    _saving = false;
+  });
+  // Also keep local backup
+  localStorage.setItem('depot_farine_backup', JSON.stringify(data));
+}
+
+// Listen for real-time changes from other devices
+REF.on('value', (snapshot) => {
+  if(_saving) return;
+  const val = snapshot.val();
+  if(val){
+    data = val;
+    if(!data.virements) data.virements=[];
+    if(!data.seuils) data.seuils={'FIRST CHOICE':20,'TERANGA':20,'PATISSIERE':20,'BEIGNET':20};
+  }
+  // Hide loading overlay
+  document.getElementById('sync-overlay').style.display='none';
+  refresh();
+}, (error) => {
+  console.error('Firebase read error:', error);
+  // Load from local backup if Firebase fails
+  const backup = localStorage.getItem('depot_farine_backup');
+  if(backup){ data = JSON.parse(backup); if(!data.virements) data.virements=[]; }
+  document.getElementById('sync-status').textContent = 'Mode hors-ligne';
+  document.getElementById('sync-bar').style.width = '100%';
+  setTimeout(()=>{ document.getElementById('sync-overlay').style.display='none'; refresh(); }, 1500);
+});
+
+// Show loading progress
+setTimeout(()=>{ const b=document.getElementById('sync-bar'); if(b) b.style.width='60%'; }, 300);
+setTimeout(()=>{ const b=document.getElementById('sync-bar'); if(b) b.style.width='85%'; }, 800);
+
 
 function getStock(k){
   return data.appros.filter(a=>a.farine===k).reduce((s,a)=>s+a.qty,0)
@@ -726,7 +784,16 @@ function printRapport(){
   const title=document.getElementById('rapport-title').textContent;
   const body=document.getElementById('rapport-body').innerHTML;
   const w=window.open('','_blank');
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+title+'</title>'+'<style>'+'body{font-family:Arial,sans-serif;padding:24px;color:#111;font-size:13px;max-width:600px;margin:0 auto}'+'h1{font-size:18px;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #111}'+'</style></head><body>'+'<h1>'+title+'</h1>'+'<div style="font-size:11px;color:#888;margin-bottom:16px">Genere le '+new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})+'</div>'+body+'</body></html>')
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+title+'</title>'+'<style>'+'body{font-family:Arial,sans-serif;padding:24px;color:#111;font-size:13px;max-width:600px;margin:0 auto}'+'h1{font-size:18px;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #111}'+'</style></head><body>'+'<h1>'+title+'</h1>'+'<div style="font-size:11px;color:#888;margin-bottom:16px">Genere le '+new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})+'</div>'+body+'
+<div id="sync-overlay" style="position:fixed;inset:0;background:#0f1117;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-size:40px">🌾</div>
+  <div style="font-size:14px;color:#f5a623;font-weight:600">Dépôt DAKAR 3</div>
+  <div style="font-size:12px;color:#8b92b8" id="sync-status">Connexion en cours...</div>
+  <div style="width:120px;height:3px;background:#1e2334;border-radius:3px;overflow:hidden">
+    <div id="sync-bar" style="height:100%;width:0%;background:#f5a623;border-radius:3px;transition:width 0.5s"></div>
+  </div>
+</div>
+</body></html>')
   w.document.close();
   setTimeout(()=>w.print(),500);
 }
